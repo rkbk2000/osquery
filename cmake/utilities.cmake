@@ -100,11 +100,9 @@ function(enableLinkWholeArchive target_name)
 endfunction()
 
 function(findPythonExecutablePath)
-  find_package(Python2 COMPONENTS Interpreter REQUIRED)
-  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  find_package(Python3 3.5 COMPONENTS Interpreter REQUIRED)
 
-  set(EX_TOOL_PYTHON2_EXECUTABLE_PATH "${Python2_EXECUTABLE}" PARENT_SCOPE)
-  set(EX_TOOL_PYTHON3_EXECUTABLE_PATH "${Python3_EXECUTABLE}" PARENT_SCOPE)
+  set(OSQUERY_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE INTERNAL "" FORCE)
 endfunction()
 
 function(generateBuildTimeSourceFile file_path content)
@@ -124,14 +122,19 @@ function(generateUnsupportedPlatformSourceFile)
   set(unsupported_platform_source_file "${source_file}" PARENT_SCOPE)
 endfunction()
 
-function(generateCopyFileTarget name type relative_file_paths destination)
-  set(source_base_path "${CMAKE_CURRENT_SOURCE_DIR}")
+function(generateCopyFileTarget name base_path type relative_file_paths destination)
 
-  if(type STREQUAL "REGEX")
-    file(GLOB_RECURSE relative_file_paths RELATIVE "${source_base_path}" "${source_base_path}/${relative_file_paths}")
+  if(base_path)
+    set(base_path "${base_path}/")
+  else()
+    set(base_path "${CMAKE_CURRENT_SOURCE_DIR}/")
   endif()
 
-  add_library("${name}" INTERFACE)
+  if(type STREQUAL "REGEX")
+    file(GLOB_RECURSE relative_file_paths RELATIVE "${base_path}" "${base_path}${relative_file_paths}")
+  endif()
+
+  add_custom_target("${name}")
 
   foreach(file ${relative_file_paths})
     get_filename_component(intermediate_directory "${file}" DIRECTORY)
@@ -148,7 +151,16 @@ function(generateCopyFileTarget name type relative_file_paths destination)
     list(APPEND created_directories "${destination}/${directory}")
   endforeach()
 
-  add_custom_target("${name}_create_dirs" DEPENDS "${created_directories}")
+  list(APPEND "create_dirs_deps"
+    "${created_directories}"
+    "${destination}"
+  )
+
+  add_custom_target("${name}_create_dirs" DEPENDS "${create_dirs_deps}")
+  add_custom_command(
+    OUTPUT "${destination}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${destination}"
+  )
 
   foreach(file ${relative_file_paths})
 
@@ -160,16 +172,18 @@ function(generateCopyFileTarget name type relative_file_paths destination)
 
     add_custom_command(
       OUTPUT "${destination}/${file}"
-      COMMAND "${CMAKE_COMMAND}" -E copy "${source_base_path}/${file}" "${destination}/${file}"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${base_path}${file}" "${destination}/${file}"
+      DEPENDS "${base_path}${file}"
     )
     list(APPEND copied_files "${destination}/${file}")
   endforeach()
 
-  add_custom_target("${name}_copy_files" DEPENDS "${name}_create_dirs" "${copied_files}")
+  add_custom_target("${name}_copy_files" DEPENDS "${copied_files}")
 
+  add_dependencies("${name}_copy_files" "${name}_create_dirs")
   add_dependencies("${name}" "${name}_copy_files")
 
-  set_target_properties("${name}" PROPERTIES INTERFACE_BINARY_DIR "${destination}")
+  set_target_properties("${name}" PROPERTIES FILES_DESTINATION_DIR "${destination}")
 endfunction()
 
 function(add_osquery_executable)
@@ -191,8 +205,25 @@ function(add_osquery_executable)
 
   add_executable(${osquery_exe_name} ${osquery_exe_args})
 
-  if("${osquery_exe_name}" MATCHES "-test$" AND DEFINED PLATFORM_POSIX)
-    target_link_options("${osquery_exe_name}" PRIVATE -Wno-sign-compare)
+  if(DEFINED PLATFORM_WINDOWS)
+    set(OSQUERY_MANIFEST_TARGET_NAME "${osquery_exe_name}")
+
+    getCleanedOsqueryVersion("OSQUERY_MANIFEST_VERSION")
+
+    configure_file(
+      "${CMAKE_SOURCE_DIR}/tools/osquery.manifest.in"
+      "${osquery_exe_name}.manifest"
+      @ONLY NEWLINE_STYLE WIN32
+    )
+    target_sources(${osquery_exe_name} PRIVATE "${osquery_exe_name}.manifest")
+  endif()
+
+  if("${osquery_exe_name}" MATCHES "-test$")
+    if(DEFINED PLATFORM_POSIX)
+      target_link_options("${osquery_exe_name}" PRIVATE -Wno-sign-compare)
+    endif()
+
+    add_dependencies("${osquery_exe_name}" osquery_tools_tests_configfiles)
   endif()
 endfunction()
 
@@ -230,9 +261,8 @@ function(generateSpecialTargets)
   # Used to generate all the files necessary to have a complete view of the project in the IDE
   add_custom_target(prepare_for_ide)
 
-
   set(excluded_folders
-    "libraries/cmake/source"
+    "libraries"
   )
 
   set(command_prefix)
@@ -241,12 +271,12 @@ function(generateSpecialTargets)
   endif()
 
   add_custom_target(format_check
-    COMMAND ${command_prefix} ${EX_TOOL_PYTHON2_EXECUTABLE_PATH} ${CMAKE_SOURCE_DIR}/tools/formatting/format-check.py --exclude-folders ${excluded_folders} origin/master
+    COMMAND ${command_prefix} "${OSQUERY_PYTHON_EXECUTABLE}" ${CMAKE_SOURCE_DIR}/tools/formatting/format-check.py --exclude-folders ${excluded_folders} origin/master
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     VERBATIM
   )
   add_custom_target(format
-    COMMAND ${command_prefix} ${EX_TOOL_PYTHON2_EXECUTABLE_PATH} ${CMAKE_SOURCE_DIR}/tools/formatting/git-clang-format.py --exclude-folders ${excluded_folders} -f --style=file
+    COMMAND ${command_prefix} "${OSQUERY_PYTHON_EXECUTABLE}" ${CMAKE_SOURCE_DIR}/tools/formatting/git-clang-format.py --exclude-folders ${excluded_folders} -f --style=file
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     VERBATIM
   )
@@ -353,4 +383,38 @@ function(copyInterfaceTargetFlagsTo destination_target source_target mode)
   target_compile_options(${destination_target} ${mode} ${dest_compile_options_list})
   target_compile_definitions(${destination_target} ${mode} ${dest_compile_definitions_list})
   target_link_options(${destination_target} ${mode} ${dest_link_options_list})
+endfunction()
+
+# Cleans up a SemVer similar version, so that it contains only 3 components and uses only numbers
+function(toCleanedSemVer version_string)
+  string(REGEX MATCH "^[0-9]+\.[0-9]+\.[0-9]+" osquery_cleaned_version "${version_string}")
+  set(toCleanedSemVer_OUTPUT "${osquery_cleaned_version}" PARENT_SCOPE)
+endfunction()
+
+function(getCleanedOsqueryVersion version_var)
+  toCleanedSemVer("${OSQUERY_VERSION_INTERNAL}")
+  set("${version_var}" "${toCleanedSemVer_OUTPUT}" PARENT_SCOPE)
+endfunction()
+
+# Get the osquery version components each in its own user defined variable
+function(getVersionComponents components major minor patch)
+  list(GET components 0 "${major}")
+  list(GET components 1 "${minor}")
+  list(GET components 2 "${patch}")
+
+  set("${major}" "${${major}}" PARENT_SCOPE)
+  set("${minor}" "${${minor}}" PARENT_SCOPE)
+  set("${patch}" "${${patch}}" PARENT_SCOPE)
+endfunction()
+
+# Get the cleaned up version and splits it up in major, minor and patch user provided variables
+function(getCleanedOsqueryVersionComponents major minor patch)
+  getCleanedOsqueryVersion("osquery_version")
+  string(REPLACE "." ";" osquery_version_components "${osquery_version}")
+
+  getVersionComponents("${osquery_version_components}" "${major}" "${minor}" "${patch}")
+
+  set("${major}" "${${major}}" PARENT_SCOPE)
+  set("${minor}" "${${minor}}" PARENT_SCOPE)
+  set("${patch}" "${${patch}}" PARENT_SCOPE)
 endfunction()

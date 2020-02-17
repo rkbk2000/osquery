@@ -1,15 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #  Copyright (c) 2014-present, Facebook, Inc.
 #  All rights reserved.
 #
 #  This source code is licensed in accordance with the terms specified in
 #  the LICENSE file found in the root directory of this source tree.
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
 
 import argparse
 import jinja2
@@ -23,7 +18,7 @@ END_LINE = "/// END[GENTABLE]"
 
 
 def genTableData(filename):
-    with open(filename, "rU") as fh:
+    with open(filename, "r") as fh:
         data = fh.read()
     begin_table = False
     table_data = []
@@ -55,7 +50,7 @@ def main(argc, argv):
     tables = []
     # Discover the output template, usually a black cpp file with includes.
     template = os.path.join(args.templates, TEMPLATE_NAME)
-    with open(template, "rU") as fh:
+    with open(template, "r") as fh:
         template_data = fh.read()
 
     for base, _, filenames in os.walk(args.sources):

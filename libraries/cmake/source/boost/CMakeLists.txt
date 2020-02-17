@@ -24,6 +24,9 @@ function(boostMain)
   generateBoostException()
   generateBoostSerialization()
   generateBoostRandom()
+  generateBoostIostreams()
+  generateBoostWinapi()
+  generateBoostEndian()
 
   add_library(thirdparty_boost INTERFACE)
 
@@ -41,6 +44,11 @@ function(boostMain)
     thirdparty_boost_uuid
     thirdparty_boost_beast
     thirdparty_boost_xpressive
+    thirdparty_boost_process
+    thirdparty_boost_iostreams
+    thirdparty_boost_winapi
+    thirdparty_boost_circularbuffer
+    thirdparty_boost_endian
   )
 
   find_package(icu REQUIRED)
@@ -142,6 +150,20 @@ function(generateBoostNumericConversion)
   )
 endfunction()
 
+function(generateBoostEndian)
+  set(library_root "${BOOST_ROOT}/libs/endian")
+
+  add_library(thirdparty_boost_endian INTERFACE)
+
+  target_include_directories(thirdparty_boost_endian SYSTEM INTERFACE
+    "${library_root}/include"
+    )
+
+  target_link_libraries(thirdparty_boost_endian INTERFACE
+    thirdparty_boost_config
+    )
+endfunction()
+
 function(generateBoostRandom)
   set(library_root "${BOOST_ROOT}/libs/random")
 
@@ -157,6 +179,7 @@ function(generateBoostRandom)
     thirdparty_boost_core
     thirdparty_boost_system
     thirdparty_boost_throwexception
+    thirdparty_boost_winapi
   )
 
   target_link_libraries(thirdparty_boost_random PRIVATE
@@ -165,7 +188,11 @@ function(generateBoostRandom)
 endfunction()
 
 function(importBoostInterfaceLibrary folder_name)
-  set(library_root "${BOOST_ROOT}/libs/${folder_name}")
+  if(folder_name STREQUAL "process")
+    set(library_root "${OSQUERY_boost_src_libs_process_ROOT_DIR}")
+  else()
+    set(library_root "${BOOST_ROOT}/libs/${folder_name}")
+  endif()
 
   string(REPLACE "_" "" target_name "${folder_name}")
   set(target_name "thirdparty_boost_${target_name}")
@@ -181,12 +208,27 @@ function(importBoostInterfaceLibrary folder_name)
       BOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX)
   endif()
 
-  foreach(additional_dependency ${ARGN})
-    string(REPLACE "_" "" additional_dependency "${additional_dependency}")
+  if(DEFINED PLATFORM_WINDOWS)
+    if("${folder_name}" STREQUAL "asio")
+      target_compile_definitions(${target_name} INTERFACE
+        BOOST_ASIO_WINDOWS
+      )
+    endif()
+  endif()
 
-    target_link_libraries("${target_name}" INTERFACE
-      "thirdparty_boost_${additional_dependency}"
-    )
+  foreach(additional_dependency ${ARGN})
+
+    if(additional_dependency MATCHES "^thirdparty_")
+      target_link_libraries("${target_name}" INTERFACE
+        "${additional_dependency}"
+      )
+    else()
+      string(REPLACE "_" "" additional_dependency "${additional_dependency}")
+
+      target_link_libraries("${target_name}" INTERFACE
+        "thirdparty_boost_${additional_dependency}"
+      )
+    endif()
   endforeach()
 endfunction()
 
@@ -203,7 +245,7 @@ function(importBoostInterfaceLibraries)
     "function_types:config"
     "tti:function_types"
     "uuid:random,tti"
-    "asio:config"
+    "asio:config,thirdparty_openssl"
     "any:config"
     "foreach:config"
     "multi_index:foreach"
@@ -243,6 +285,10 @@ function(importBoostInterfaceLibraries)
     "lexical_cast:range,numeric_conversion,integer,array,container,math"
     "system:config"
     "tuple:config"
+    "process:config"
+    "circular_buffer:config"
+    "scope_exit:typeof,config"
+    "typeof:config"
   )
 
   add_library(thirdparty_boost_config INTERFACE)
@@ -259,6 +305,28 @@ function(importBoostInterfaceLibraries)
 
     importBoostInterfaceLibrary("${library_name}" ${library_dependency_list})
   endforeach()
+endfunction()
+
+function(generateBoostWinapi)
+  add_library(thirdparty_boost_winapi INTERFACE)
+
+  set(library_root "${BOOST_ROOT}/libs/winapi")
+
+  target_include_directories(thirdparty_boost_winapi SYSTEM INTERFACE
+    "${library_root}/include"
+  )
+
+  if(DEFINED PLATFORM_WINDOWS)
+    target_compile_definitions(thirdparty_boost_winapi INTERFACE
+      BOOST_USE_WINDOWS_H
+      NOMINMAX
+    )
+  endif()
+
+  target_link_libraries(thirdparty_boost_winapi INTERFACE
+    thirdparty_boost_config
+    thirdparty_boost_predef
+  )
 endfunction()
 
 function(generateBoostLocale)
@@ -382,6 +450,7 @@ function(generateBoostChrono)
     thirdparty_boost_system
     thirdparty_boost_throwexception
     thirdparty_boost_utility
+    thirdparty_boost_winapi
   )
 
   target_link_libraries(thirdparty_boost_chrono PRIVATE
@@ -612,14 +681,38 @@ endfunction()
 function(generateBoostContext)
   set(library_root "${BOOST_ROOT}/libs/context")
 
-  set(asm_source_file_list
-    "${library_root}/src/asm/jump_x86_64_sysv_elf_gas.S"
-    "${library_root}/src/asm/make_x86_64_sysv_elf_gas.S"
-    "${library_root}/src/asm/ontop_x86_64_sysv_elf_gas.S"
-  )
+  if(DEFINED PLATFORM_LINUX)
+    set(asm_source_file_list
+      "${library_root}/src/asm/jump_x86_64_sysv_elf_gas.S"
+      "${library_root}/src/asm/make_x86_64_sysv_elf_gas.S"
+      "${library_root}/src/asm/ontop_x86_64_sysv_elf_gas.S"
+    )
+  elseif(DEFINED PLATFORM_MACOS)
+    set(asm_source_file_list
+      "${library_root}/src/asm/jump_x86_64_sysv_macho_gas.S"
+      "${library_root}/src/asm/make_x86_64_sysv_macho_gas.S"
+      "${library_root}/src/asm/ontop_x86_64_sysv_macho_gas.S"
+    )
+  elseif(DEFINED PLATFORM_WINDOWS)
+    set(asm_source_file_list
+      "${library_root}/src/asm/jump_x86_64_ms_pe_masm.asm"
+      "${library_root}/src/asm/make_x86_64_ms_pe_masm.asm"
+      "${library_root}/src/asm/ontop_x86_64_ms_pe_masm.asm"
+    )
+  endif()
 
   foreach(asm_source_file ${asm_source_file_list})
-    set_property(SOURCE "${asm_source_file}" PROPERTY LANGUAGE C)
+    if(DEFINED PLATFORM_POSIX)
+      set_property(SOURCE "${asm_source_file}" PROPERTY LANGUAGE C)
+    endif()
+
+    if(DEFINED PLATFORM_MACOS)
+      set_property(SOURCE "${asm_source_file}" PROPERTY COMPILE_FLAGS "-x assembler-with-cpp")
+    endif()
+
+    if(DEFINED PLATFORM_WINDOWS)
+      set_property(SOURCE "${asm_source_file}" PROPERTY COMPILE_FLAGS "/Cp /Cx /Zp4")
+    endif()
   endforeach()
 
   add_library(thirdparty_boost_context STATIC
@@ -636,6 +729,11 @@ function(generateBoostContext)
     target_sources(thirdparty_boost_context PRIVATE
       "${library_root}/src/windows/stack_traits.cpp"
     )
+
+    target_compile_definitions(thirdparty_boost_context PRIVATE
+      BOOST_CONTEXT_EXPORT=
+    )
+
   endif()
 
   target_include_directories(thirdparty_boost_context SYSTEM PUBLIC
@@ -720,6 +818,7 @@ function(generateBoostFilesystem)
     thirdparty_boost_io
     thirdparty_boost_containerhash
     thirdparty_boost_smartptr
+    thirdparty_boost_winapi
   )
 
   target_link_libraries(thirdparty_boost_filesystem PRIVATE
@@ -814,6 +913,10 @@ function(generateBoostThread)
       "${library_root}/src/win32/tss_dll.cpp"
       "${library_root}/src/win32/tss_pe.cpp"
     )
+
+    target_compile_definitions(thirdparty_boost_thread PRIVATE
+      BOOST_THREAD_BUILD_LIB
+    )
   endif()
 
   target_include_directories(thirdparty_boost_thread SYSTEM PUBLIC
@@ -837,9 +940,57 @@ function(generateBoostThread)
     thirdparty_boost_function
     thirdparty_boost_typeindex
     thirdparty_boost_algorithm
+    thirdparty_boost_winapi
   )
 
   target_link_libraries(thirdparty_boost_thread PRIVATE
+    thirdparty_cxx_settings
+  )
+endfunction()
+
+function(generateBoostIostreams)
+  set(library_root "${BOOST_ROOT}/libs/iostreams")
+
+  add_library(thirdparty_boost_iostreams STATIC
+    "${library_root}/src/zlib.cpp"
+    "${library_root}/src/gzip.cpp"
+    "${library_root}/src/zstd.cpp"
+    "${library_root}/src/bzip2.cpp"
+  )
+
+  if(DEFINED PLATFORM_POSIX)
+    target_sources(thirdparty_boost_iostreams PRIVATE
+      "${library_root}/src/lzma.cpp"
+    )
+  endif()
+
+  target_include_directories(thirdparty_boost_iostreams SYSTEM PUBLIC
+    "${library_root}/include"
+  )
+
+  target_link_libraries(thirdparty_boost_iostreams PUBLIC
+    thirdparty_boost_assert
+    thirdparty_boost_throwexception
+    thirdparty_boost_smartptr
+    thirdparty_boost_core
+    thirdparty_boost_mpl
+    thirdparty_boost_typetraits
+    thirdparty_boost_integer
+    thirdparty_boost_containerhash
+    thirdparty_boost_range
+    thirdparty_boost_utility
+    thirdparty_zlib
+    thirdparty_zstd
+    thirdparty_bzip2
+  )
+
+  if(DEFINED PLATFORM_POSIX)
+    target_link_libraries(thirdparty_boost_iostreams PUBLIC
+      thirdparty_lzma
+    )
+  endif()
+
+  target_link_libraries(thirdparty_boost_iostreams PRIVATE
     thirdparty_cxx_settings
   )
 endfunction()

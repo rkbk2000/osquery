@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #  Copyright (c) 2014-present, Facebook, Inc.
 #  All rights reserved.
@@ -15,7 +15,7 @@ import sys
 def check(base_commit, exclude_folders):
     try:
         cmd = [
-          "python",
+          sys.executable,
           os.path.join(os.path.dirname(os.path.abspath(__file__)), "git-clang-format.py"),
           "--style=file",
           "--diff",
@@ -26,7 +26,10 @@ def check(base_commit, exclude_folders):
         if exclude_folders:
             cmd += ["--exclude-folders", exclude_folders]
 
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             encoding='utf8')
         out, err = p.communicate()
     except OSError as e:
         print("{}\n\n{!r}".format("Failed to call git-clang-format.py", e))
@@ -53,7 +56,7 @@ def get_base_commit(base_branch):
     try:
         return subprocess.check_output(
                 ["git", "merge-base", "HEAD", base_branch]
-                ).strip()
+                ).decode().strip()
     except OSError as e:
         print("{}\n\n{}".format("Failed to execut git", str(e)))
     except subprocess.CalledProcessError as e:

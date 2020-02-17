@@ -37,7 +37,6 @@
 #include <thread>
 #include <vector>
 
-
 namespace osquery {
 
 DECLARE_uint64(config_refresh);
@@ -80,6 +79,13 @@ class ConfigTests : public testing::Test {
   void TearDown() {
     fs::remove_all(fake_directory_);
     FLAGS_config_refresh = refresh_;
+  }
+
+  void resetDispatcher() {
+    auto& dispatcher = Dispatcher::instance();
+    dispatcher.stopServices();
+    dispatcher.joinServices();
+    dispatcher.resetStopping();
   }
 
  protected:
@@ -299,7 +305,7 @@ TEST_F(ConfigTests, test_content_update) {
   // Update, then clear, packs should have been cleared.
   get().update(config_data);
   auto source_hash = get().getHash(source);
-  EXPECT_EQ("fb0973b39c70db16655effbca532d4aa93381e59", source_hash);
+  EXPECT_EQ("dfae832a62a3e3a51760334184364b7d66468ccc", source_hash);
 
   size_t count = 0;
   auto packCounter = [&count](const Pack& pack) { count++; };
@@ -560,8 +566,7 @@ TEST_F(ConfigTests, test_config_refresh) {
   get().reset();
 
   // Stop the existing refresh runner thread.
-  Dispatcher::stopServices();
-  Dispatcher::joinServices();
+  resetDispatcher();
 
   // Set a config_refresh value to convince the Config to start the thread.
   FLAGS_config_refresh = 2;
@@ -603,8 +608,7 @@ TEST_F(ConfigTests, test_config_refresh) {
   EXPECT_EQ(get().getRefresh(), FLAGS_config_refresh);
 
   // Stop the new refresh runner thread.
-  Dispatcher::stopServices();
-  Dispatcher::joinServices();
+  resetDispatcher();
 
   FLAGS_config_refresh = refresh;
   FLAGS_config_accelerated_refresh = refresh_acceleratred;

@@ -32,6 +32,8 @@ osquery_cxx_library(
     visibility = ["PUBLIC"],
     deps = [
         osquery_tp_target("boost"),
+        osquery_target("osquery/utils/conversions:conversions"),
+        ":errno",
     ],
 )
 
@@ -79,6 +81,10 @@ osquery_cxx_library(
                 "windows/errno.cpp",
             ],
         ),
+    ],
+    deps = [
+        osquery_target("osquery/logger:logger"),
+        osquery_target("osquery/utils/status:status"),
     ],
     tests = [
         ":errno_tests",
@@ -176,6 +182,7 @@ osquery_cxx_library(
     ],
     visibility = ["PUBLIC"],
     deps = [
+        osquery_target("osquery/utils/status:status"),
         osquery_tp_target("boost"),
     ],
 )

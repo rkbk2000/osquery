@@ -6,6 +6,7 @@
 
 function(osqueryUtilsMain)
   add_subdirectory("aws")
+  add_subdirectory("azure")
   add_subdirectory("caches")
   add_subdirectory("system")
   add_subdirectory("status")
@@ -98,11 +99,18 @@ function(generateOsqueryUtilsUtilstestsTest)
     tests/scope_guard.cpp
   )
 
+  if(DEFINED PLATFORM_WINDOWS)
+    list(APPEND source_files
+      tests/windows/env.cpp
+    )
+  endif()
+
   add_osquery_executable(osquery_utils_utilstests-test ${source_files})
 
   target_link_libraries(osquery_utils_utilstests-test PRIVATE
     osquery_cxx_settings
     osquery_utils
+    osquery_utils_system_env
     thirdparty_googletest
   )
 endfunction()

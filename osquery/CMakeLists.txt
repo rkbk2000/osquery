@@ -11,7 +11,6 @@ function(osqueryMain)
   add_subdirectory("sql")
   add_subdirectory("sdk")
   add_subdirectory("numeric_monitoring")
-  add_subdirectory("killswitch")
   add_subdirectory("registry")
   add_subdirectory("logger")
   add_subdirectory("distributed")
@@ -65,6 +64,22 @@ function(generateOsqueryd)
     osquery_cxx_settings
     osquery_main
   )
+
+  set(osquery_ext "")
+  if(PLATFORM_WINDOWS)
+    set(osquery_ext ".exe")
+  endif()
+
+  add_custom_target(create_osqueryi ALL DEPENDS osqueryi${osquery_ext})
+  add_custom_command(OUTPUT osqueryi${osquery_ext}
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink osqueryd${osquery_ext} osqueryi${osquery_ext}
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:osqueryd>"
+  )
+  add_dependencies(create_osqueryi osqueryd)
+endfunction()
+
+function(enableOsqueryWEL)
+  target_sources(osqueryd PRIVATE "${TOOLS_WEL_FILES_ROOT_DIR}/windows_resources.rc")
 endfunction()
 
 osqueryMain()

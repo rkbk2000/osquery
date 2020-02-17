@@ -6,7 +6,7 @@ The supported compilers are: the osquery toolchain (LLVM/Clang 8.0.1) on Linux, 
 
 # Building with CMake
 
-Git, CMake (>= 3.14.6), Python 2, and Python 3 are required to build. The rest of the dependencies are downloaded by CMake.
+Git (>= 2.14.0), CMake (>= 3.14.6), Python 3 are required to build. The rest of the dependencies are downloaded by CMake.
 
 The default build type is `RelWithDebInfo` (optimizations active + debug symbols) and can be changed in the CMake configure phase by setting the `CMAKE_BUILD_TYPE` flag to `Release` or `Debug`.
 
@@ -16,13 +16,17 @@ Note: the recommended system memory for building osquery is at least 8GB, or Cla
 
 ## Linux
 
-The root folder is assumed to be `/home/<user>`
+The root folder is assumed to be `/home/<user>`.
 
 **Ubuntu 18.04/18.10**
 
 ```bash
 # Install the prerequisites
-sudo apt install --no-install-recommends git python python3 bison flex make
+sudo apt install --no-install-recommends git python3 bison flex make
+
+# Optional: install python tests prerequisites
+sudo apt install --no-install-recommends python3-pip python3-setuptools python3-psutil python3-six python3-wheel
+pip3 install timeout_decorator thrift==0.11.0 osquery pexpect==3.3
 
 # Download and install the osquery toolchain
 wget https://github.com/osquery/osquery-toolchain/releases/download/1.0.0/osquery-toolchain-1.0.0.tar.xz
@@ -54,10 +58,15 @@ Please ensure [Homebrew](https://brew.sh/) has been installed, first. Then do th
 ```bash
 # Install prerequisites
 xcode-select --install
-brew install git cmake python@2 python
+brew install git cmake python clang-format
+
+# Optional: install python tests prerequisites
+pip3 install setuptools pexpect==3.3 psutil timeout_decorator six thrift==0.11.0 osquery
 ```
 
 **Step 2: Download and build**
+
+A macOS 10.11 deployment target is selected in this example.
 
 ```bash
 # Download source
@@ -66,7 +75,7 @@ cd osquery
 
 # Configure
 mkdir build; cd build
-cmake ..
+cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.11 ..
 
 # Build
 cmake --build .
@@ -74,7 +83,9 @@ cmake --build .
 
 ## Windows 10
 
-The root folder is assumed to be `C:\Users\<user>`
+The root folder is assumed to be `C:\`
+
+Note: The intention here is to reduce the length of the prefix of the osquery folder, since Windows and msbuild have a 255 characters max path limit.
 
 **Step 1: Install the prerequisites**
 
@@ -82,12 +93,24 @@ Note: It may be easier to install these prerequisites using [Chocolatey](https:/
 
 - [CMake](https://cmake.org/) (>= 3.14.6): the MSI installer is recommended. During installation, select the option to add it to the system `PATH` for all users. If there is any older version of CMake installed (e.g., using Chocolatey), uninstall that version first!  Do not install CMake using the Visual Studio Installer, because it contains an older version than required.
 - Visual Studio 2019 (2 options)
-  1. [Visual Studio 2019 Build Tools Installer](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16) (without Visual Studio): In the installer choose the "C++ build tools" workload, then on the right, under "Optional", select "MSVC v141 - VS 2017 C++", "MSVC v142 - VS 2017 C++", and "Windows 10 SDK".
-  2. [Visual Studio 2019 Community Installer](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&rel=16): In the installer choose the "Desktop development with C++" workload, then on the right, under "Optional", select "MSVC v141 - VS 2017 C++", "MSVC v142 - VS 2017 C++", and "Windows 10 SDK".
-- [Git for Windows](https://github.com/git-for-windows/git/releases/latest) (or equivalent)
-- [Python 2](https://www.python.org/downloads/windows/), specifically the 64-bit version.
+  1. [Visual Studio 2019 Build Tools Installer](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16) (without Visual Studio): In the installer choose the "C++ build tools" workload, then on the right, under "Optional", select "MSVC v141 - VS 2017 C++", "MSVC v142 - VS 2017 C++", "Windows 10 SDK", and "C++ Clang tools for Windows".
+  2. [Visual Studio 2019 Community Installer](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&rel=16): In the installer choose the "Desktop development with C++" workload, then on the right, under "Optional", select "MSVC v141 - VS 2017 C++", "MSVC v142 - VS 2017 C++", "Windows 10 SDK", and "C++ Clang tools for Windows".
+- [Git for Windows](https://github.com/git-for-windows/git/releases/latest): Select "checkout as-is, commit as-is". Later check "Enable symbolic links" support.
 - [Python 3](https://www.python.org/downloads/windows/), specifically the 64-bit version.
 - [Wix Toolset](https://wixtoolset.org/releases/)
+- [Strawberry Perl](http://strawberryperl.com/) for the OpenSSL formula. It is recommended to install it to the default destination path.
+- [7-Zip](https://www.7-zip.org/) if building the Chocolatey package.
+
+**Optional: Install python tests prerequisites**
+
+Python 3 is assumed to be installed in `C:\Program Files\Python37`
+
+```PowerShell
+# Using a PowerShell console
+& 'C:\Program Files\Python37\python.exe' -m pip install setuptools psutil timeout_decorator thrift==0.11.0 osquery pywin32
+```
+
+The use of an Administrator shell is recommended because the build process creates symbolic links. These [require a special permission to create on Windows](https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/create-symbolic-links), and the simplest solution is to build as Administrator. If you wish, you can instead assign just the `SeCreateSymbolicLinkPrivilege` permission to the user account. The setting can be found in "Local Security Policy" under Security Settings, Local Policies, User Rights Assignment. The user then has to log out and back in for the policy change to apply.
 
 **Step 2: Download and build**
 
@@ -99,13 +122,11 @@ cd osquery
 
 # Configure
 mkdir build; cd build
-cmake -A x64 -T v141 ..
+cmake -G "Visual Studio 16 2019" -A x64 -T v141 ..
 
 # Build
 cmake --build . --config RelWithDebInfo -j10 # Number of projects to build in parallel
 ```
-
-The use of an Administrator shell is recommended because the build process creates symbolic links. These [require a special permission to create on Windows](https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/create-symbolic-links), and the simplest solution is to build as Administrator. If you wish, you can instead assign just the `SeCreateSymbolicLinkPrivilege` permission to the user account. The setting can be found in "Local Security Policy" under Security Settings, Local Policies, User Rights Assignment. There is also an opportunity while installing Git for Windows from the official installer (unselected by default) to enable this permission for a specific user, who then has to log out and back in for the policy change to apply.
 
 ## Testing
 
@@ -157,6 +178,57 @@ A "single" test case often still involves dozens or hundreds of unit tests. To r
 ```bash
 GTEST_FILTER=sharedMemory.* ctest -R <testName> -V #runs just the sharedMemory tests under the <testName> set.
 ```
+
+## Formatting the code
+
+Osquery uses `clang-format` to format its code, but it's not run on the whole project or files each time; it's run only on the modified lines instead,
+using custom scripts.
+
+On Linux the `clang-format` executable is shipped along with the osquery toolchain, and it is the recommended way to run it.  
+For the other platforms please refer to their **Install the prerequisites** section if you haven't already.
+
+On Windows remember to update the PATH environment variable with the `clang-format` root folder, so that the scripts can find it.  
+You should be able to find `clang-format` folder in the path where you installed either the Build Tools or the full Visual Studio, and from there `VC\Tools\Llvm\bin`.
+
+To verify that all the commits that are present on the branch but not on master are properly formatted, run the following command from the build folder:
+
+```bash
+cmake --build . --target format_check
+```
+This is the same command the CI runs to verify formatting.
+
+If the code is not formatted, you can do so with the following command run from the build folder,
+but the code has to be put in the stage area first if it was already committed:
+
+```bash
+cmake --build . --target format
+```
+
+To avoid having to move the committed files to the stage area and back each time, remember to format the code before committing.
+
+
+## Running Cppcheck (Linux only)
+
+1. Install it from the distro repository: `apt install cppcheck`
+2. Build the **cppcheck** target `cmake --build . --target cppcheck`
+
+## Running clang-tidy (Linux only)
+
+The `clang-tidy` executable is shipped along with the osquery toolchain, and it is the recommended way to run it. It is however possible to use the system one, provided it's accessible from the PATH environment variable.
+
+1. When configuring, pass `-DOSQUERY_ENABLE_CLANG_TIDY=ON` to CMake
+2. Configure the checks: `-DOSQUERY_CLANG_TIDY_CHECKS=check1,check2` **(optional)**
+3. Build osquery
+
+By default, the following checks are enabled:
+
+1. cert-*
+2. cppcoreguidelines-*
+3. performance-*
+4. portability-*
+5. readability-*
+6. modernize-*
+7. bugprone-*
 
 # Building with Buck
 
@@ -313,6 +385,7 @@ vagrant ssh aws-amazon2015.03
 Package creation is facilitated by CPack.
 
 The package will include several components:
+
 - The executables: `osqueryd`, `osqueryi`, and small management script `osqueryctl`
 - An osquery systemd unit on Linux (with initd script wrapper)
 - An osquery LaunchDaemon on macOS
@@ -326,7 +399,7 @@ You may override this with the CMake `PACKAGING_SYSTEM` variable as seen in the 
 
 ```sh
 cmake -DPACKAGING_SYSTEM=RPM ..
-make package
+cmake --build . --target package
 ```
 
 On macOS the `package` target will create a `.pkg`, and on Windows it will create a `.msi`.

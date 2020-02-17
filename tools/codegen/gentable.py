@@ -1,15 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #  Copyright (c) 2014-present, Facebook, Inc.
 #  All rights reserved.
 #
 #  This source code is licensed in accordance with the terms specified in
 #  the LICENSE file found in the root directory of this source tree.
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
 
 import argparse
 import ast
@@ -21,7 +16,7 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
-from osquery.tools.tests import utils
+from osquery_tests.tools.tests import utils
 
 # the log format for the logging module
 LOG_FORMAT = "%(levelname)s [Line %(lineno)d]: %(message)s"
@@ -84,7 +79,7 @@ TABLE_ATTRIBUTES = {
     "user_data": "USER_BASED",
     "cacheable": "CACHEABLE",
     "utility": "UTILITY",
-    "kernel_required": "KERNEL_REQUIRED",
+    "kernel_required": "KERNEL_REQUIRED", # Deprecated
 }
 
 
@@ -258,13 +253,6 @@ class TableState(Singleton):
                                     column.name, self.table_name))))
                 exit(1)
 
-        if "ADDITIONAL" in all_options and "INDEX" not in all_options:
-            if "no_pkey" not in self.attributes:
-                print(lightred(
-                    "Table cannot have 'additional' columns without an index: %s" %(
-                    path)))
-                exit(1)
-
         path_bits = path.split("/")
         for i in range(1, len(path_bits)):
             dir_path = ""
@@ -403,7 +391,6 @@ def implementation(impl_string, generator=False):
     """
     define the path to the implementation file and the function which
     implements the virtual table. You should use the following format:
-
       # the path is "osquery/table/implementations/foo.cpp"
       # the function is "QueryData genFoo();"
       implementation("foo@genFoo")

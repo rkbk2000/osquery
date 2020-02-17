@@ -25,6 +25,7 @@ osquery_cxx_library(
             LINUX,
             [
                 "linux/proc.h",
+                "linux/mounts.h",
             ],
         ),
     ],
@@ -45,10 +46,17 @@ osquery_cxx_library(
             ],
         ),
         (
+            MACOSX,
+            [
+                "darwin/bsd_file_flags.cpp",
+            ],
+        ),
+        (
             LINUX,
             [
                 "linux/mem.cpp",
                 "linux/proc.cpp",
+                "linux/mounts.cpp",
             ],
         ),
         (
@@ -68,6 +76,7 @@ osquery_cxx_library(
         osquery_target("osquery/utils/conversions:conversions"),
         osquery_target("osquery/utils/status:status"),
         osquery_target("osquery/utils/system:env"),
+        osquery_target("osquery/utils/system:filepath"),
         osquery_tp_target("boost"),
         osquery_tp_target("libarchive"),
         osquery_tp_target("zstd"),
@@ -98,13 +107,16 @@ osquery_cxx_test(
     ],
     env = {
         "TEST_CONF_FILES_DIR": "$(location {})".format(
-            osquery_target("tools/tests:plist_files"),
+            osquery_target("tools/tests/configs:plist_files"),
         ),
     },
     platform_srcs = [
         (
             MACOSX,
-            ["tests/darwin/plist_tests.cpp"],
+            [
+                "tests/darwin/plist_tests.cpp",
+                "tests/darwin/bsd_file_flags_tests.cpp"
+            ],
         ),
     ],
     visibility = ["PUBLIC"],

@@ -27,8 +27,13 @@ namespace osquery {
 
 FLAG(string,
      disable_tables,
-     "Not Specified",
+     "",
      "Comma-delimited list of table names to be disabled");
+
+FLAG(string,
+     enable_tables,
+     "",
+     "Comma-delimited list of table names to be enabled");
 
 FLAG(string, nullvalue, "", "Set string for NULL values, default ''");
 
@@ -361,11 +366,43 @@ SQLiteDBInstance::~SQLiteDBInstance() {
 SQLiteDBManager::SQLiteDBManager() : db_(nullptr) {
   sqlite3_soft_heap_limit64(1);
   setDisabledTables(Flag::getValue("disable_tables"));
+  setEnabledTables(Flag::getValue("enable_tables"));
 }
 
 bool SQLiteDBManager::isDisabled(const std::string& table_name) {
-  const auto& element = instance().disabled_tables_.find(table_name);
-  return (element != instance().disabled_tables_.end());
+  bool disabled_set = !Flag::isDefault("disable_tables");
+  bool enabled_set = !Flag::isDefault("enable_tables");
+  if (!disabled_set && !enabled_set) {
+    // We have zero enabled tables and zero disabled tables.
+    // As a result, no tables are disabled.
+    return false;
+  }
+  const auto& element_disabled = instance().disabled_tables_.find(table_name);
+  const auto& element_enabled = instance().enabled_tables_.find(table_name);
+  bool table_disabled = (element_disabled != instance().disabled_tables_.end());
+  bool table_enabled = (element_enabled != instance().enabled_tables_.end());
+
+  if (table_disabled) {
+    return true;
+  }
+
+  if (table_enabled && disabled_set && !table_disabled) {
+    return false;
+  }
+
+  if (table_enabled && !disabled_set) {
+    return false;
+  }
+
+  if (enabled_set && !table_enabled) {
+    return true;
+  }
+
+  if (disabled_set && !table_disabled) {
+    return false;
+  }
+
+  return true;
 }
 
 void SQLiteDBManager::resetPrimary() {
@@ -384,6 +421,12 @@ void SQLiteDBManager::resetPrimary() {
 void SQLiteDBManager::setDisabledTables(const std::string& list) {
   const auto& tables = split(list, ",");
   disabled_tables_ =
+      std::unordered_set<std::string>(tables.begin(), tables.end());
+}
+
+void SQLiteDBManager::setEnabledTables(const std::string& list) {
+  const auto& tables = split(list, ",");
+  enabled_tables_ =
       std::unordered_set<std::string>(tables.begin(), tables.end());
 }
 
@@ -564,7 +607,9 @@ Status readRows(sqlite3_stmt* prepared_statement,
     } while (SQLITE_ROW == rc);
   }
   if (rc != SQLITE_DONE) {
-    return Status::failure(sqlite3_errmsg(instance->db()));
+    auto s = Status::failure(sqlite3_errmsg(instance->db()));
+    sqlite3_finalize(prepared_statement);
+    return s;
   }
 
   rc = sqlite3_finalize(prepared_statement);
@@ -627,10 +672,11 @@ Status getQueryColumnsInternal(const std::string& q,
                                  &stmt,
                                  nullptr);
     if (rc != SQLITE_OK || stmt == nullptr) {
+      auto s = Status::failure(sqlite3_errmsg(instance->db()));
       if (stmt != nullptr) {
         sqlite3_finalize(stmt);
       }
-      return Status(1, sqlite3_errmsg(instance->db()));
+      return s;
     }
 
     // Get column count

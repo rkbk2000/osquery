@@ -4,8 +4,8 @@
 # This source code is licensed in accordance with the terms specified in
 # the LICENSE file found in the root directory of this source tree.
 
-function(thrifMain)
-  set(library_root "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/cpp")
+function(thriftMain)
+  set(library_root "${OSQUERY_thrift_ROOT_DIR}/lib/cpp")
 
   add_library(thirdparty_thrift
     # libthrift
@@ -90,25 +90,46 @@ function(thrifMain)
     THRIFT_STATIC_DEFINE
   )
 
+  if(DEFINED PLATFORM_WINDOWS)
+    target_compile_definitions(thirdparty_thrift PRIVATE
+      PACKAGE_VERSION="0.12.0"
+    )
+  endif()
+
   target_link_libraries(thirdparty_thrift PUBLIC
     thirdparty_openssl
     thirdparty_zlib
     thirdparty_boost
   )
 
+  if(DEFINED PLATFORM_WINDOWS)
+    target_link_libraries(thirdparty_thrift PRIVATE
+      thirdparty_boost_scopeexit
+    )
+  endif()
+
   target_link_libraries(thirdparty_thrift PRIVATE
     thirdparty_cxx_settings
   )
 
+  if(DEFINED PLATFORM_LINUX)
+    set(include_config_dir linux)
+  elseif(DEFINED PLATFORM_MACOS)
+    set(include_config_dir macos)
+  elseif(DEFINED PLATFORM_WINDOWS)
+    set(include_config_dir windows)
+  endif()
+
   target_include_directories(thirdparty_thrift PRIVATE
     "${library_root}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/config"
+    "${CMAKE_CURRENT_SOURCE_DIR}/config/${include_config_dir}"
   )
 
   target_include_directories(thirdparty_thrift SYSTEM INTERFACE
     "${library_root}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/config"
+    "${CMAKE_CURRENT_SOURCE_DIR}/config/${include_config_dir}"
   )
+
 endfunction()
 
-thrifMain()
+thriftMain()

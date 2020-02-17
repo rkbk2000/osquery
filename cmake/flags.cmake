@@ -2,9 +2,6 @@ include(CheckPIESupported)
 check_pie_supported()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_LINK_SEARCH_START_STATIC ON)
-set(CMAKE_LINK_SEARCH_END_STATIC ON)
-
 function(setupBuildFlags)
   add_library(cxx_settings INTERFACE)
   add_library(c_settings INTERFACE)
@@ -58,9 +55,12 @@ function(setupBuildFlags)
       -Woverloaded-virtual
       -Wnon-virtual-dtor
       -Weffc++
+      -stdlib=libc++
     )
 
     set(posix_cxx_link_options
+      -stdlib=libc++
+      -ldl
     )
 
     set(posix_c_compile_options
@@ -97,15 +97,17 @@ function(setupBuildFlags)
 
       set(osquery_linux_common_link_options
         -Wl,-z,relro,-z,now
-        -Wl,--build-id
+        -Wl,--build-id=sha1
       )
 
       set(linux_cxx_link_options
         --no-undefined
+        -lresolv
+        -pthread
       )
 
       set(linux_cxx_link_libraries
-        libc++abi.a
+        c++abi
         rt
         dl
       )
@@ -128,7 +130,6 @@ function(setupBuildFlags)
         -x objective-c++
         -fobjc-arc
         -Wabi-tag
-        -stdlib=libc++
       )
 
       set(macos_cxx_link_options
@@ -145,6 +146,7 @@ function(setupBuildFlags)
         "SHELL:-framework ServiceManagement"
         "SHELL:-framework SystemConfiguration"
         -stdlib=libc++
+        -lresolv
       )
 
       set(macos_cxx_link_libraries
@@ -183,6 +185,22 @@ function(setupBuildFlags)
        "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo"))
       target_compile_options(cxx_settings INTERFACE -g0)
       target_compile_options(c_settings INTERFACE -g0)
+    endif()
+
+    if(OSQUERY_ENABLE_ADDRESS_SANITIZER)
+      target_compile_options(cxx_settings INTERFACE
+        -fsanitize=address,fuzzer-no-link
+        -fsanitize-coverage=edge,indirect-calls
+      )
+      target_compile_options(c_settings INTERFACE
+        -fsanitize=address,fuzzer-no-link
+        -fsanitize-coverage=edge,indirect-calls
+      )
+
+      # Require at least address (may be refactored out)
+      target_link_options(cxx_settings INTERFACE
+        -fsanitize=address
+      )
     endif()
   elseif(DEFINED PLATFORM_WINDOWS)
 
@@ -228,6 +246,7 @@ function(setupBuildFlags)
     set(osquery_windows_common_defines
       WIN32=1
       WINDOWS=1
+      WIN32_LEAN_AND_MEAN
       OSQUERY_WINDOWS=1
       OSQUERY_BUILD_PLATFORM=windows
       OSQUERY_BUILD_DISTRO=10
@@ -272,6 +291,26 @@ function(setupBuildFlags)
     )
 
     list(APPEND osquery_defines ${osquery_windows_common_defines})
+
+    # Remove some flags from the default ones to avoid "overriding" warnings or unwanted results.
+    if(DEFINED PLATFORM_WINDOWS AND "${CMAKE_GENERATOR}" STREQUAL "Ninja")
+      string(REPLACE "/MD" "" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+      string(REPLACE "/MD" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+      string(REPLACE "/MD" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+      string(REPLACE "/MD" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+      string(REPLACE "/Zi" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+      string(REPLACE "/Zi" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+      # This must be removed, because passing /EHs doesn't override it
+      string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+      overwrite_cache_variable("CMAKE_C_FLAGS_RELEASE" STRING "${CMAKE_C_FLAGS_RELEASE}")
+      overwrite_cache_variable("CMAKE_C_FLAGS_RELWITHDEBINFO" STRING "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+      overwrite_cache_variable("CMAKE_CXX_FLAGS_RELEASE" STRING "${CMAKE_CXX_FLAGS_RELEASE}")
+      overwrite_cache_variable("CMAKE_CXX_FLAGS_RELWITHDEBINFO" STRING "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+      overwrite_cache_variable("CMAKE_CXX_FLAGS" STRING "${CMAKE_CXX_FLAGS}")
+    endif()
   else()
     message(FATAL_ERROR "Platform not supported!")
   endif()
